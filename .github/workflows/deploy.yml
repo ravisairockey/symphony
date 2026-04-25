@@ -1,0 +1,77 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  deployments: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  check-pages-enabled:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check GitHub Pages Enabled
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const { data: page } = await github.rest.repos.getPages({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+              console.log('GitHub Pages is enabled:', page.html_url);
+            } catch (error) {
+              if (error.status === 404) {
+                core.setFailed('❌ GitHub Pages is NOT enabled for this repository.\n' +
+                  'Please enable it at: https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/settings/pages\n' +
+                  'Set Source to "GitHub Actions" and save.');
+              } else {
+                throw error;
+              }
+            }
+
+  build:
+    runs-on: ubuntu-latest
+    needs: check-pages-enabled
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: ./BLACKJACK
+        run: npm ci
+
+      - name: Build with Next.js
+        working-directory: ./BLACKJACK
+        run: npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          name: github-pages
+          path: ./BLACKJACK/dist
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
