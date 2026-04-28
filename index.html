@@ -1,902 +1,1643 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Particle Symphony — Immersive GPU Music Visualizer</title>
-    <style>
-        :root {
-            --glass-bg: rgba(255, 255, 255, 0.05);
-            --glass-border: rgba(255, 255, 255, 0.15);
-            --accent-color: #00f2ff;
-            --text-color: #ffffff;
-            --panel-blur: 20px;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Particle Symphony is a GPU-accelerated WebGL2 and Web Audio music visualizer with transform feedback particle simulation.">
+  <title>Particle Symphony - Immersive GPU Music Visualizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel: rgba(5, 8, 22, 0.58);
+      --line: rgba(180, 210, 255, 0.18);
+      --text: rgba(241, 247, 255, 0.94);
+      --muted: rgba(190, 206, 228, 0.68);
+      --accent: #7dd3fc;
+    }
 
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #000;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            color: var(--text-color);
-        }
+    * {
+      box-sizing: border-box;
+    }
 
-        canvas {
-            display: block;
-            position: fixed;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #02030a;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+    }
 
-        /* Glassmorphic UI */
-        .ui-overlay {
-            position: absolute;
-            z-index: 10;
-            pointer-events: none;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: space-between;
-            padding: 20px;
-            box-sizing: border-box;
-        }
+    body {
+      min-height: 100vh;
+    }
 
-        .panel {
-            pointer-events: all;
-            background: var(--glass-bg);
-            backdrop-filter: blur(var(--panel-blur));
-            -webkit-backdrop-filter: blur(var(--panel-blur));
-            border: 1px solid var(--glass-border);
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            transition: transform 0.3s ease, opacity 0.3s ease;
-        }
+    #glCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      background: radial-gradient(circle at 50% 40%, #0f1d40, #02030a 62%);
+      cursor: crosshair;
+      touch-action: none;
+    }
 
-        .panel.hidden {
-            transform: translateX(-20px);
-            opacity: 0;
-            pointer-events: none;
-        }
+    .chrome {
+      transition: opacity 260ms ease, transform 260ms ease, filter 260ms ease;
+    }
 
-        /* Left Controls Panel */
-        #controls-panel {
-            width: 300px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
+    .glass {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+      backdrop-filter: blur(22px) saturate(130%);
+      -webkit-backdrop-filter: blur(22px) saturate(130%);
+    }
 
-        .control-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
+    .brand-glow {
+      text-shadow: 0 0 36px rgba(125, 211, 252, 0.42), 0 0 84px rgba(217, 70, 239, 0.2);
+    }
 
-        .control-group label {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.7;
-        }
+    .control-button {
+      border: 1px solid rgba(180, 210, 255, 0.18);
+      background: rgba(255, 255, 255, 0.07);
+      color: rgba(241, 247, 255, 0.94);
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
 
-        .slider-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+    .control-button:hover,
+    .control-button:focus-visible {
+      transform: translateY(-1px);
+      border-color: rgba(125, 211, 252, 0.55);
+      background: rgba(125, 211, 252, 0.13);
+      outline: none;
+    }
 
-        input[type="range"] {
-            flex-grow: 1;
-            cursor: pointer;
-            accent-color: var(--accent-color);
-        }
+    .control-button.primary {
+      border-color: rgba(125, 211, 252, 0.44);
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.38), rgba(217, 70, 239, 0.28));
+    }
 
-        .value-display {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-            width: 40px;
-            text-align: right;
-        }
+    .readout-line {
+      position: relative;
+      height: 3px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.09);
+    }
 
-        select, button {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid var(--glass-border);
-            color: white;
-            padding: 8px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background 0.2s;
-        }
+    .readout-line span {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #38bdf8, #a78bfa, #fb7185);
+      transition: width 70ms linear;
+    }
 
-        select:hover, button:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
 
-        .btn-primary {
-            background: var(--accent-color);
-            color: black;
-            font-weight: bold;
-            border: none;
-            margin-top: 10px;
-        }
+    select,
+    input[type="file"]::file-selector-button {
+      color: rgba(241, 247, 255, 0.94);
+    }
 
-        .btn-primary:hover {
-            background: #fff;
-        }
+    select {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(180, 210, 255, 0.18);
+    }
 
-        /* Right Stats Panel */
-        #stats-panel {
-            width: 200px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
-        }
+    option {
+      background: #08101f;
+      color: #f8fbff;
+    }
 
-        .stat-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-        }
+    .tiny-label {
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
 
-        .stat-label {
-            opacity: 0.6;
-        }
+    #app.ui-hidden .chrome {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-8px);
+      filter: blur(2px);
+    }
 
-        .stat-value {
-            color: var(--accent-color);
-        }
+    #showUiHint {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 220ms ease;
+    }
 
-        .beat-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #333;
-            display: inline-block;
-            margin-left: 5px;
-            transition: background 0.1s, box-shadow 0.1s;
-        }
+    #app.ui-hidden #showUiHint {
+      opacity: 1;
+      pointer-events: auto;
+    }
 
-        .beat-active {
-            background: var(--accent-color);
-            box-shadow: 0 0 10px var(--accent-color);
-        }
+    #beatDot {
+      box-shadow: 0 0 0 rgba(251, 113, 133, 0);
+      transition: transform 90ms ease, box-shadow 90ms ease, background 90ms ease;
+    }
 
-        /* Top Message / Guide */
-        #guide {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            text-align: center;
-            pointer-events: none;
-            opacity: 0.6;
-            font-size: 14px;
-            letter-spacing: 1px;
-        }
+    #beatDot.hot {
+      transform: scale(1.5);
+      background: #fb7185;
+      box-shadow: 0 0 34px rgba(251, 113, 133, 0.78);
+    }
 
-        #drop-zone {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 100;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(10px);
-            border: 2px dashed var(--accent-color);
-            pointer-events: none;
-        }
+    .modal-open {
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
 
-        .hidden-input {
-            display: none;
-        }
-    </style>
+    @media (max-width: 860px) {
+      .brand-panel {
+        left: 1rem;
+        right: 1rem;
+        top: 1rem;
+        max-width: none;
+      }
+
+      .control-panel {
+        left: 1rem;
+        right: 1rem;
+        top: auto;
+        bottom: 1rem;
+        width: auto;
+        max-height: min(58vh, 580px);
+      }
+
+      .hud-panel {
+        display: none;
+      }
+    }
+  </style>
 </head>
 <body>
+  <div id="app" class="relative min-h-screen overflow-hidden">
+    <canvas id="glCanvas" aria-label="Particle Symphony WebGL visualizer"></canvas>
+    <audio id="audioPlayer" preload="metadata" crossorigin="anonymous"></audio>
 
-    <div id="drop-zone">
-        <h1>DROP AUDIO FILE</h1>
-    </div>
+    <section class="brand-panel chrome fixed left-6 top-6 z-20 max-w-xl select-none">
+      <p class="tiny-label mb-3 text-xs">GPU transform feedback + Web Audio</p>
+      <h1 class="brand-glow text-5xl font-black leading-none tracking-[-0.08em] text-white sm:text-7xl">Particle Symphony</h1>
+      <p class="mt-4 max-w-md text-sm leading-6 text-slate-200/76 sm:text-base">Live audio becomes a million-point kinetic instrument. Drop a track, start the microphone, or let the idle engine breathe until the first beat lands.</p>
+      <div class="mt-5 flex flex-wrap gap-2">
+        <button id="micBtn" class="control-button primary rounded-full px-4 py-2 text-sm font-semibold">Start microphone</button>
+        <label class="control-button rounded-full px-4 py-2 text-sm font-semibold">
+          Load track
+          <input id="fileInput" class="sr-only" type="file" accept="audio/*">
+        </label>
+        <button id="guideBtn" class="control-button rounded-full px-4 py-2 text-sm font-semibold">Guide</button>
+      </div>
+      <p id="statusLine" class="mt-4 text-xs text-slate-300/70">WebGL2 ready check is starting...</p>
+    </section>
 
-    <div id="guide">
-        SPACE: Play/Pause | F: Fullscreen | H: Hide UI | M: Microphone | Drag audio file anywhere
-    </div>
-
-    <div class="ui-overlay">
-        <div id="controls-panel" class="panel">
-            <h2 style="margin: 0 0 10px 0; font-weight: 300; letter-spacing: 2px;">PARTICLE SYMPHONY</h2>
-            
-            <div class="control-group">
-                <label>Visual Preset</label>
-                <select id="preset-select">
-                    <option value="nebula">Nebula Bloom</option>
-                    <option value="wave">Kinetic Wave</option>
-                    <option value="singularity">Singularity</option>
-                    <option value="crystal">Crystalline Grid</option>
-                    <option value="supernova">Supernova</option>
-                </select>
-            </div>
-
-            <div class="control-group">
-                <label>Particle Budget</label>
-                <div class="slider-row">
-                    <input type="range" id="budget-slider" min="10000" max="1048576" step="10000" value="262144">
-                    <span class="value-display" id="budget-val">262k</span>
-                </div>
-            </div>
-
-            <div class="control-group">
-                <label>Volume</label>
-                <div class="slider-row">
-                    <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.85">
-                    <span class="value-display" id="volume-val">85%</span>
-                </div>
-            </div>
-
-            <div class="control-group">
-                <label>Beat Sensitivity</label>
-                <div class="slider-row">
-                    <input type="range" id="sensitivity-slider" min="0.1" max="2.0" step="0.01" value="0.62">
-                    <span class="value-display" id="sensitivity-val">62%</span>
-                </div>
-            </div>
-
-            <div class="control-group">
-                <label>FFT Smoothing</label>
-                <div class="slider-row">
-                    <input type="range" id="smoothing-slider" min="0" max="0.99" step="0.01" value="0.82">
-                    <span class="value-display" id="smoothing-val">82%</span>
-                </div>
-            </div>
-
-            <div class="control-group">
-                <label>Particle Size</label>
-                <div class="slider-row">
-                    <input type="range" id="size-slider" min="0.1" max="10.0" step="0.1" value="2.4">
-                    <span class="value-display" id="size-val">2.4</span>
-                </div>
-            </div>
-
-            <div class="control-group" style="flex-direction: row; gap: 10px; align-items: center;">
-                <label style="margin:0">Post FX</label>
-                <input type="checkbox" id="postfx-toggle" checked>
-                <label style="margin:0">Auto Cam</label>
-                <input type="checkbox" id="autocam-toggle" checked>
-            </div>
-
-            <button id="mic-btn">Enable Microphone</button>
-            <button id="file-btn">Load Audio File</button>
-            <input type="file" id="audio-upload" class="hidden-input" accept="audio/*">
-            <button id="play-btn" class="btn-primary">PLAY / PAUSE</button>
+    <aside class="control-panel chrome glass fixed right-6 top-6 bottom-6 z-30 w-[min(390px,calc(100vw-2rem))] overflow-y-auto rounded-3xl p-5">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="tiny-label text-[10px]">Console</p>
+          <h2 class="mt-1 text-xl font-bold tracking-tight">Performance Controls</h2>
         </div>
+        <button id="hideBtn" class="control-button rounded-full px-3 py-1.5 text-xs font-semibold">Hide</button>
+      </div>
 
-        <div id="stats-panel" class="panel">
-            <div class="stat-item">
-                <span class="stat-label">FPS</span>
-                <span class="stat-value" id="stat-fps">--</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Particles</span>
-                <span class="stat-value" id="stat-particles">--</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Source</span>
-                <span class="stat-value" id="stat-source">Idle</span>
-            </div>
-            <div class="stat-item" style="align-items: center;">
-                <span class="stat-label">Beat Signal</span>
-                <div class="beat-indicator" id="beat-sig"></div>
-            </div>
-            <hr style="border: 0; border-top: 1px solid var(--glass-border); margin: 10px 0;">
-            <div class="stat-item">
-                <span class="stat-label">Low</span>
-                <span class="stat-value" id="stat-low">0.00</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Mid</span>
-                <span class="stat-value" id="stat-mid">0.00</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">High</span>
-                <span class="stat-value" id="stat-high">0.00</span>
-            </div>
+      <div class="mt-5 grid grid-cols-2 gap-2">
+        <button id="playBtn" class="control-button primary rounded-2xl px-3 py-3 text-sm font-semibold">Play / Pause</button>
+        <button id="fullscreenBtn" class="control-button rounded-2xl px-3 py-3 text-sm font-semibold">Fullscreen</button>
+      </div>
+
+      <div class="mt-5 space-y-4">
+        <label class="block">
+          <span class="mb-2 flex items-center justify-between text-xs text-slate-300/80"><span>Preset</span><span id="presetName">Nebula Bloom</span></span>
+          <select id="presetSelect" class="w-full rounded-2xl px-3 py-3 text-sm outline-none">
+            <option value="0">Nebula Bloom</option>
+            <option value="1">Bass Collider</option>
+            <option value="2">Harmonic Sculpture</option>
+            <option value="3">Waveform Cathedral</option>
+            <option value="4">Spectral Rain</option>
+            <option value="5">Solar Choir</option>
+          </select>
+        </label>
+
+        <label class="block">
+          <span class="mb-2 flex items-center justify-between text-xs text-slate-300/80"><span>Particle budget</span><span id="particleReadout">131k</span></span>
+          <select id="particleSelect" class="w-full rounded-2xl px-3 py-3 text-sm outline-none">
+            <option value="65536">65k - battery safe</option>
+            <option value="131072" selected>131k - balanced</option>
+            <option value="262144">262k - high</option>
+            <option value="524288">524k - ultra</option>
+            <option value="1048576">1M - discrete GPU</option>
+          </select>
+        </label>
+
+        <label class="block">
+          <span class="mb-2 flex items-center justify-between text-xs text-slate-300/80"><span>Volume</span><span id="volumeReadout">85%</span></span>
+          <input id="volumeRange" type="range" min="0" max="1" step="0.01" value="0.85">
+        </label>
+
+        <label class="block">
+          <span class="mb-2 flex items-center justify-between text-xs text-slate-300/80"><span>Beat sensitivity</span><span id="sensitivityReadout">62%</span></span>
+          <input id="sensitivityRange" type="range" min="0" max="1" step="0.01" value="0.62">
+        </label>
+
+        <label class="block">
+          <span class="mb-2 flex items-center justify-between text-xs text-slate-300/80"><span>FFT smoothing</span><span id="smoothingReadout">82%</span></span>
+          <input id="smoothingRange" type="range" min="0" max="0.98" step="0.01" value="0.82">
+        </label>
+
+        <label class="block">
+          <span class="mb-2 flex items-center justify-between text-xs text-slate-300/80"><span>Particle size</span><span id="pointReadout">2.4</span></span>
+          <input id="pointRange" type="range" min="0.7" max="5.5" step="0.1" value="2.4">
+        </label>
+
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <label class="control-button flex cursor-pointer items-center justify-between rounded-2xl px-3 py-3 text-sm font-semibold">
+            <span>Post FX</span>
+            <input id="postToggle" type="checkbox" checked>
+          </label>
+          <label class="control-button flex cursor-pointer items-center justify-between rounded-2xl px-3 py-3 text-sm font-semibold">
+            <span>Auto camera</span>
+            <input id="autoCameraToggle" type="checkbox" checked>
+          </label>
         </div>
+      </div>
+
+      <div class="mt-6 space-y-3 border-t border-white/10 pt-5">
+        <div>
+          <div class="mb-1 flex justify-between text-[11px] text-slate-300/70"><span>Low</span><span id="lowText">0.00</span></div>
+          <div class="readout-line"><span id="lowBar"></span></div>
+        </div>
+        <div>
+          <div class="mb-1 flex justify-between text-[11px] text-slate-300/70"><span>Mid</span><span id="midText">0.00</span></div>
+          <div class="readout-line"><span id="midBar"></span></div>
+        </div>
+        <div>
+          <div class="mb-1 flex justify-between text-[11px] text-slate-300/70"><span>High</span><span id="highText">0.00</span></div>
+          <div class="readout-line"><span id="highBar"></span></div>
+        </div>
+      </div>
+
+      <p class="mt-5 text-xs leading-5 text-slate-300/64">Mouse: move to attract particles, click for impulse, Shift-drag or right-drag to orbit, wheel to zoom. Drop an audio file anywhere.</p>
+    </aside>
+
+    <div class="hud-panel chrome glass fixed left-6 bottom-6 z-20 w-[min(520px,calc(100vw-2rem))] rounded-3xl p-4">
+      <div class="grid grid-cols-4 gap-4 text-xs text-slate-300/72">
+        <div><p class="tiny-label text-[9px]">FPS</p><p id="fpsReadout" class="mt-1 text-lg font-bold text-white">--</p></div>
+        <div><p class="tiny-label text-[9px]">Particles</p><p id="hudParticles" class="mt-1 text-lg font-bold text-white">--</p></div>
+        <div><p class="tiny-label text-[9px]">Source</p><p id="sourceReadout" class="mt-1 truncate text-lg font-bold text-white">Idle</p></div>
+        <div class="flex items-center justify-end gap-3"><span class="tiny-label text-[9px]">Beat</span><span id="beatDot" class="h-3 w-3 rounded-full bg-sky-300/60"></span></div>
+      </div>
     </div>
 
-    <!-- Three.js and dependencies from CDN -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
-    </script>
+    <button id="showUiHint" class="control-button fixed right-5 top-5 z-40 rounded-full px-4 py-2 text-sm font-semibold">Show UI (H)</button>
 
-    <script type="module">
-        import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-        import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-        import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
-        import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
-        import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+    <div id="unsupported" class="fixed inset-0 z-50 hidden items-center justify-center bg-[#02030a] p-6 text-center">
+      <div class="max-w-xl">
+        <p class="tiny-label mb-4 text-xs">WebGL2 required</p>
+        <h2 class="text-4xl font-black tracking-tight">This browser cannot run the GPU particle engine.</h2>
+        <p class="mt-4 text-slate-300/78">Open this page in a current Chrome, Edge, Firefox, or Safari Technology Preview build with WebGL2 enabled. The application avoids eval and makes no network requests except the Tailwind CSS CDN.</p>
+      </div>
+    </div>
 
-        /**
-         * AUDIO ANALYSIS MODULE
-         */
-        class AudioAnalyzer {
-            constructor() {
-                this.context = null;
-                this.analyser = null;
-                this.source = null;
-                this.dataArray = null;
-                this.isInitialized = false;
-                
-                this.frequencyData = { low: 0, mid: 0, high: 0 };
-                this.beatActive = false;
-                this.lastEnergy = 0;
-                
-                this.settings = {
-                    smoothing: 0.82,
-                    sensitivity: 0.62,
-                    volume: 0.85
-                };
-            }
+    <div id="guideModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/62 p-4 opacity-0 pointer-events-none transition-opacity duration-200">
+      <article class="glass max-h-[88vh] w-[min(920px,calc(100vw-2rem))] overflow-y-auto rounded-3xl p-6 sm:p-8">
+        <div class="flex items-start justify-between gap-6">
+          <div>
+            <p class="tiny-label text-xs">Embedded README</p>
+            <h2 class="mt-2 text-3xl font-black tracking-tight">Using Particle Symphony</h2>
+          </div>
+          <button id="closeGuideBtn" class="control-button rounded-full px-4 py-2 text-sm font-semibold">Close</button>
+        </div>
+        <div class="mt-6 grid gap-6 text-sm leading-6 text-slate-200/78 md:grid-cols-2">
+          <section>
+            <h3 class="text-lg font-bold text-white">Browser Requirements</h3>
+            <p class="mt-2">Use a WebGL2 capable browser. Chrome or Edge with a discrete GPU is recommended for 524k to 1M particles. Integrated GPUs are auto-protected by the particle budget selector and low-FPS reducer.</p>
+          </section>
+          <section>
+            <h3 class="text-lg font-bold text-white">Open And Deploy</h3>
+            <p class="mt-2">This is a single <code class="bg-white/10 px-1 rounded">index.html</code>. Double-click it for local use, or deploy the file directly to GitHub Pages, Netlify, Vercel, or any static host. Microphone access may require HTTPS or localhost.</p>
+          </section>
+          <section>
+            <h3 class="text-lg font-bold text-white">Audio Sources</h3>
+            <p class="mt-2">Click Start microphone for live input, click Load track for an audio file, or drag and drop a file on the viewport. Browser autoplay rules require one user gesture before audio starts.</p>
+          </section>
+          <section>
+            <h3 class="text-lg font-bold text-white">Shortcuts</h3>
+            <p class="mt-2">Space toggles play or pause. F toggles fullscreen. P advances presets. H hides or shows the UI. G opens this guide. R resets the camera.</p>
+          </section>
+          <section class="md:col-span-2">
+            <h3 class="text-lg font-bold text-white">Compute Shader Implementation</h3>
+            <p class="mt-2">The particle state lives in two pairs of GPU buffers: position/life and velocity/seed. A WebGL2 transform feedback pass runs a custom GLSL vertex shader with rasterization discarded, writes the next state into the alternate buffer pair, then swaps buffers. The render pass consumes the current buffers as point sprites with a custom GLSL material. FFT data is uploaded every frame into a 512-bin R8 texture, while low, mid, high, RMS, centroid, flatness, beat, pointer, and camera features are streamed as uniforms. Scene, trail, bloom, vignette, and grading are separate shader passes over framebuffer textures.</p>
+          </section>
+        </div>
+      </article>
+    </div>
+  </div>
 
-            async init(type, streamOrFile = null) {
-                if (!this.context) {
-                    this.context = new (window.AudioContext || window.webkitAudioContext)();
-                }
-                
-                if (this.context.state === 'suspended') {
-                    await this.context.resume();
-                }
+  <script>
+    (() => {
+      'use strict';
 
-                if (this.analyser) this.analyser.disconnect();
+      const $ = (id) => document.getElementById(id);
+      const canvas = $('glCanvas');
+      const audioElement = $('audioPlayer');
+      const app = $('app');
 
-                this.analyser = this.context.createAnalyser();
-                this.analyser.fftSize = 2048;
-                this.analyser.smoothingTimeConstant = this.settings.smoothing;
-                
-                const gainNode = this.context.createGain();
-                gainNode.gain.value = this.settings.volume;
+      const ui = {
+        micBtn: $('micBtn'),
+        fileInput: $('fileInput'),
+        guideBtn: $('guideBtn'),
+        closeGuideBtn: $('closeGuideBtn'),
+        guideModal: $('guideModal'),
+        statusLine: $('statusLine'),
+        playBtn: $('playBtn'),
+        fullscreenBtn: $('fullscreenBtn'),
+        hideBtn: $('hideBtn'),
+        showUiHint: $('showUiHint'),
+        presetSelect: $('presetSelect'),
+        presetName: $('presetName'),
+        particleSelect: $('particleSelect'),
+        particleReadout: $('particleReadout'),
+        volumeRange: $('volumeRange'),
+        volumeReadout: $('volumeReadout'),
+        sensitivityRange: $('sensitivityRange'),
+        sensitivityReadout: $('sensitivityReadout'),
+        smoothingRange: $('smoothingRange'),
+        smoothingReadout: $('smoothingReadout'),
+        pointRange: $('pointRange'),
+        pointReadout: $('pointReadout'),
+        postToggle: $('postToggle'),
+        autoCameraToggle: $('autoCameraToggle'),
+        lowBar: $('lowBar'),
+        midBar: $('midBar'),
+        highBar: $('highBar'),
+        lowText: $('lowText'),
+        midText: $('midText'),
+        highText: $('highText'),
+        fpsReadout: $('fpsReadout'),
+        hudParticles: $('hudParticles'),
+        sourceReadout: $('sourceReadout'),
+        beatDot: $('beatDot'),
+        unsupported: $('unsupported')
+      };
 
-                if (type === 'mic') {
-                    const stream = streamOrFile || await navigator.mediaDevices.getUserMedia({ audio: true });
-                    this.source = this.context.createMediaStreamSource(stream);
-                    this.source.connect(this.analyser);
-                    document.getElementById('stat-source').textContent = 'Microphone';
-                } else if (type === 'file') {
-                    const audio = new Audio(URL.createObjectURL(streamOrFile));
-                    audio.crossOrigin = 'anonymous';
-                    this.source = this.context.createMediaElementSource(audio);
-                    this.source.connect(gainNode).connect(this.context.destination);
-                    gainNode.connect(this.analyser);
-                    this.audioElement = audio;
-                    document.getElementById('stat-source').textContent = 'File';
-                }
+      const presetNames = [
+        'Nebula Bloom',
+        'Bass Collider',
+        'Harmonic Sculpture',
+        'Waveform Cathedral',
+        'Spectral Rain',
+        'Solar Choir'
+      ];
 
-                this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-                this.isInitialized = true;
-                return this.audioElement || null;
-            }
+      const state = {
+        gl: null,
+        ready: false,
+        width: 1,
+        height: 1,
+        dpr: 1,
+        particleCount: 131072,
+        requestedParticleCount: 131072,
+        readIndex: 0,
+        preset: 0,
+        postFx: true,
+        autoCamera: true,
+        pointScale: 2.4,
+        sensitivity: 0.62,
+        smoothing: 0.82,
+        volume: 0.85,
+        lastTime: 0,
+        fps: 60,
+        fpsAverage: 60,
+        lowFpsFrames: 0,
+        beatFlash: 0,
+        impulse: 0,
+        uiHidden: false,
+        pointer: {
+          x: 0,
+          y: 0,
+          world: [0, 0, 0],
+          strength: 0,
+          down: false,
+          rotate: false,
+          lastX: 0,
+          lastY: 0
+        },
+        camera: {
+          yaw: 0.72,
+          pitch: 0.2,
+          distance: 29,
+          eye: [0, 0, 29],
+          right: [1, 0, 0],
+          up: [0, 1, 0]
+        },
+        view: new Float32Array(16),
+        projection: new Float32Array(16)
+      };
 
-            update() {
-                if (!this.isInitialized) return;
-                
-                this.analyser.getByteFrequencyData(this.dataArray);
-                
-                // Frequency range splits
-                let low = 0, mid = 0, high = 0;
-                const len = this.dataArray.length;
-                
-                for (let i = 0; i < len * 0.1; i++) low += this.dataArray[i];
-                for (let i = Math.floor(len * 0.1); i < len * 0.4; i++) mid += this.dataArray[i];
-                for (let i = Math.floor(len * 0.4); i < len * 0.8; i++) high += this.dataArray[i];
-                
-                this.frequencyData.low = (low / (len * 0.1)) / 255;
-                this.frequencyData.mid = (mid / (len * 0.3)) / 255;
-                this.frequencyData.high = (high / (len * 0.4)) / 255;
-                
-                // Simple beat detection (energy delta)
-                const currentEnergy = this.frequencyData.low;
-                const delta = currentEnergy - this.lastEnergy;
-                this.beatActive = delta > (0.1 * this.settings.sensitivity);
-                this.lastEnergy = currentEnergy;
-            }
+      const audio = {
+        context: null,
+        analyser: null,
+        gain: null,
+        elementSource: null,
+        micSource: null,
+        micStream: null,
+        objectUrl: '',
+        sourceType: 'Idle',
+        connectedToDestination: false,
+        frequencyData: new Uint8Array(1024),
+        timeData: new Uint8Array(2048),
+        textureData: new Uint8Array(512),
+        low: 0,
+        mid: 0,
+        high: 0,
+        rms: 0,
+        centroid: 0,
+        flatness: 0,
+        onset: 0,
+        beat: 0,
+        fastLow: 0,
+        slowLow: 0.001,
+        previousRms: 0,
+        lastBeatTime: 0,
+        paused: false
+      };
 
-            togglePlay() {
-                if (!this.audioElement) return;
-                if (this.audioElement.paused) this.audioElement.play();
-                else this.audioElement.pause();
-            }
-        }
+      let programs = {};
+      let buffers = {};
+      let targets = {};
+      let audioTexture = null;
+      let quadVao = null;
 
-        /**
-         * GPGPU PARTICLE SYSTEM
-         */
-        class GPUParticleSystem {
-            constructor(scene, renderer) {
-                this.scene = scene;
-                this.renderer = renderer;
-                this.particleCount = 262144; // Default 512x512
-                this.textureSize = 512;
-                
-                this.initGPGPU();
-                this.initRenderMesh();
-            }
+      // Transform feedback update shader: reads particle state buffers and writes the next state entirely on the GPU.
+      const updateVS = `#version 300 es
+precision highp float;
+layout(location=0) in vec4 aPosLife;
+layout(location=1) in vec4 aVelSeed;
+out vec4 vPosLife;
+out vec4 vVelSeed;
+uniform sampler2D uAudioTex;
+uniform float uTime;
+uniform float uDelta;
+uniform float uParticleCount;
+uniform float uBeat;
+uniform float uImpulse;
+uniform int uPreset;
+uniform vec4 uBands;
+uniform vec4 uFeatures;
+uniform vec4 uPointer;
+const float TAU = 6.28318530718;
 
-            initGPGPU() {
-                // Textures for Position and Velocity (Ping-Pong)
-                this.posA = this.createDataTexture();
-                this.posB = this.createDataTexture();
-                this.velA = this.createDataTexture();
-                this.velB = this.createDataTexture();
+float hash11(float p) {
+  return fract(sin(p * 127.1 + 311.7) * 43758.5453123);
+}
 
-                this.initPositionData();
-                this.initVelocityData();
+vec3 hashSphere(float seed) {
+  float z = hash11(seed + 1.0) * 2.0 - 1.0;
+  float a = hash11(seed + 2.0) * TAU;
+  float r = pow(max(0.001, hash11(seed + 3.0)), 0.3333);
+  float xy = sqrt(max(0.0, 1.0 - z * z));
+  return vec3(cos(a) * xy, sin(a) * xy, z) * r;
+}
 
-                // Compute Shaders
-                this.posMaterial = new THREE.ShaderMaterial({
-                    uniforms: {
-                        tPos: { value: null },
-                        tVel: { value: null },
-                        uDeltaTime: { value: 0 },
-                        uAudioLow: { value: 0 },
-                        uAudioMid: { value: 0 },
-                        uAudioHigh: { value: 0 },
-                        uBeat: { value: 0 },
-                        uMouse: { value: new THREE.Vector3() },
-                        uPreset: { value: 0 }
-                    },
-                    vertexShader: `void main() { gl_Position = vec4(0.0); }`, // Not used for rendering
-                    fragmentShader: this.getPosFragmentShader()
-                });
+float fft(float x) {
+  return texture(uAudioTex, vec2(clamp(x, 0.0, 1.0), 0.5)).r;
+}
 
-                this.velMaterial = new THREE.ShaderMaterial({
-                    uniforms: {
-                        tPos: { value: null },
-                        tVel: { value: null },
-                        uDeltaTime: { value: 0 },
-                        uAudioLow: { value: 0 },
-                        uAudioMid: { value: 0 },
-                        uAudioHigh: { value: 0 },
-                        uBeat: { value: 0 },
-                        uMouse: { value: new THREE.Vector3() },
-                        uPreset: { value: 0 }
-                    },
-                    vertexShader: `void main() { gl_Position = vec4(0.0); }`,
-                    fragmentShader: this.getVelFragmentShader()
-                });
+vec3 targetFor(float n, float seed) {
+  float f = fft(fract(n * 9.0 + seed * 0.017 + uTime * 0.015));
 
-                this.gpgpuScene = new THREE.Scene();
-                this.gpgpuCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-                this.gpgpuQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.posMaterial);
-                this.gpgpuScene.add(this.gpgpuQuad);
-            }
+  if (uPreset == 0) {
+    float arm = floor(hash11(seed + 4.0) * 5.0);
+    float radius = 2.0 + 20.0 * pow(hash11(seed + 5.0), 0.72);
+    float angle = radius * 0.54 + arm * TAU / 5.0 + uTime * (0.045 + uBands.x * 0.15) + f * 0.9;
+    float z = (hash11(seed + 6.0) - 0.5) * (4.0 + uBands.y * 10.0) + sin(n * TAU * 16.0 + uTime) * f * 2.0;
+    return vec3(cos(angle) * radius, sin(angle) * radius, z) * (0.62 + uBands.w * 0.52);
+  }
 
-            createDataTexture() {
-                const data = new Float32Array(this.textureSize * this.textureSize * 4);
-                const tex = new THREE.DataTexture(data, this.textureSize, this.textureSize, THREE.RGBAFormat, THREE.FloatType);
-                tex.needsUpdate = true;
-                return tex;
-            }
+  if (uPreset == 1) {
+    float z = (fract(n * 5.0 - uTime * (0.035 + uBands.x * 0.12)) * 2.0 - 1.0) * 28.0;
+    float angle = n * TAU * 122.0 + z * 0.25 + uTime * (0.8 + uBands.x * 2.2);
+    float radius = 3.8 + f * 11.0 + uBands.x * 5.5 + sin(z * 0.42 + uTime) * 1.1;
+    return vec3(cos(angle) * radius, sin(angle) * radius, z);
+  }
 
-            initPositionData() {
-                const data = this.posA.image.data;
-                for (let i = 0; i < data.length; i += 4) {
-                    data[i] = (Math.random() - 0.5) * 10;
-                    data[i+1] = (Math.random() - 0.5) * 10;
-                    data[i+2] = (Math.random() - 0.5) * 10;
-                    data[i+3] = 1.0;
-                }
-                this.posA.needsUpdate = true;
-                this.posB.image.data.set(data);
-                this.posB.needsUpdate = true;
-            }
+  if (uPreset == 2) {
+    float t = n * TAU * 7.0 + uTime * (0.08 + uBands.y * 0.2);
+    float x = sin(t) + 2.0 * sin(2.0 * t);
+    float y = cos(t) - 2.0 * cos(2.0 * t);
+    float z = -sin(3.0 * t);
+    float scale = 3.0 + f * 4.0 + uBands.y * 3.0;
+    return vec3(x, y, z) * scale + hashSphere(seed + 8.0) * (0.8 + uBands.z * 2.0);
+  }
 
-            initVelocityData() {
-                const data = this.velA.image.data;
-                for (let i = 0; i < data.length; i += 4) {
-                    data[i] = (Math.random() - 0.5) * 0.1;
-                    data[i+1] = (Math.random() - 0.5) * 0.1;
-                    data[i+2] = (Math.random() - 0.5) * 0.1;
-                    data[i+3] = 0.0;
-                }
-                this.velA.needsUpdate = true;
-                this.velB.image.data.set(data);
-                this.velB.needsUpdate = true;
-            }
+  if (uPreset == 3) {
+    float lane = floor(n * 14.0);
+    float row = fract(n * 14.0);
+    float wave = fft(row) * 2.0 - 0.55;
+    float x = (row * 2.0 - 1.0) * 22.0;
+    float y = wave * (8.0 + uBands.w * 14.0) + sin(row * TAU * 3.0 + uTime) * 1.4;
+    float z = (lane - 6.5) * 1.55 + sin(row * TAU + lane) * f * 2.5;
+    return vec3(x, y, z);
+  }
 
-            initRenderMesh() {
-                const geo = new THREE.BufferGeometry();
-                const positions = new Float32Array(this.particleCount * 3);
-                const uvs = new Float32Array(this.particleCount * 2);
+  if (uPreset == 4) {
+    float gx = fract(n * 89.0 + seed * 0.01) - 0.5;
+    float gz = fract(n * 41.0 + seed * 0.013) - 0.5;
+    float fall = mod(hash11(seed + 10.0) * 44.0 - uTime * (4.2 + uBands.x * 18.0), 44.0) - 22.0;
+    float lift = fft(fract(abs(gx) + abs(gz))) * 8.0;
+    return vec3(gx * 38.0, fall + lift, gz * 26.0);
+  }
 
-                for (let i = 0; i < this.particleCount; i++) {
-                    const x = (i % this.textureSize) / this.textureSize;
-                    const y = Math.floor(i / this.textureSize) / this.textureSize;
-                    uvs[i * 2] = x;
-                    uvs[i * 2 + 1] = y;
-                }
+  float z = hash11(seed + 1.0) * 2.0 - 1.0;
+  float a = n * TAU * 233.0 + uTime * (0.12 + uBands.x * 0.3);
+  float xy = sqrt(max(0.0, 1.0 - z * z));
+  float radius = 8.0 + f * 8.5 + sin(uTime + n * TAU * 18.0) * uBands.y * 3.0;
+  vec3 sphere = vec3(cos(a) * xy, sin(a) * xy, z) * radius;
+  vec3 orbit = vec3(cos(a * 0.37), sin(a * 0.23), sin(a * 0.51)) * (2.0 + uBands.z * 6.0);
+  return sphere + orbit;
+}
 
-                geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+void main() {
+  float n = (float(gl_VertexID) + 0.5) / max(1.0, uParticleCount);
+  float seed = aVelSeed.w;
+  vec3 pos = aPosLife.xyz;
+  vec3 vel = aVelSeed.xyz;
+  float life = aPosLife.w;
+  vec3 target = targetFor(n, seed);
+  float audioEnergy = max(max(uBands.x, uBands.y), uBands.z);
 
-                this.renderMaterial = new THREE.ShaderMaterial({
-                    uniforms: {
-                        tPos: { value: null },
-                        uSize: { value: 2.4 },
-                        uAudioLow: { value: 0 },
-                        uPreset: { value: 0 }
-                    },
-                    vertexShader: this.getRenderVertexShader(),
-                    fragmentShader: this.getRenderFragmentShader(),
-                    transparent: true,
-                    blending: THREE.AdditiveBlending,
-                    depthWrite: false
-                });
+  if (life <= 0.0 || length(pos) > 92.0) {
+    pos = target + hashSphere(seed + uTime) * (1.8 + uBands.w * 5.5);
+    vel = hashSphere(seed + 5.0) * (0.25 + uBands.z * 0.8);
+    life = 0.72 + hash11(seed + 9.0) * 0.95;
+  }
 
-                this.points = new THREE.Points(geo, this.renderMaterial);
-                this.scene.add(this.points);
-            }
+  vec3 toTarget = target - pos;
+  float pull = 0.2 + uBands.w * 0.65 + uBands.y * 0.35;
+  vel += toTarget * pull * uDelta;
 
-            getPosFragmentShader() {
-                return `
-                    uniform sampler2D tPos;
-                    uniform sampler2D tVel;
-                    uniform float uDeltaTime;
-                    void main() {
-                        vec2 uv = gl_FragCoord.xy / ${this.textureSize}.0;
-                        vec3 pos = texture2D(tPos, uv).rgb;
-                        vec3 vel = texture2D(tVel, uv).rgb;
-                        pos += vel * uDeltaTime * 60.0;
-                        gl_FragColor = vec4(pos, 1.0);
-                    }
-                `;
-            }
+  vec3 flow = vec3(
+    sin(pos.y * 0.37 + uTime * 0.9 + seed * 2.0),
+    sin(pos.z * 0.31 - uTime * 1.1 + seed),
+    sin(pos.x * 0.29 + pos.y * 0.1 + uTime * 0.7)
+  );
+  vel += flow * uDelta * (0.38 + uBands.z * 2.2 + uFeatures.y * 0.8);
 
-            getVelFragmentShader() {
-                return `
-                    uniform sampler2D tPos;
-                    uniform sampler2D tVel;
-                    uniform float uDeltaTime;
-                    uniform float uAudioLow;
-                    uniform float uAudioMid;
-                    uniform float uAudioHigh;
-                    uniform float uBeat;
-                    uniform vec3 uMouse;
-                    uniform float uPreset;
+  float pDist = length(pos - uPointer.xyz);
+  if (abs(uPointer.w) > 0.001) {
+    vec3 pDir = normalize(pos - uPointer.xyz + hashSphere(seed) * 0.001);
+    vel += pDir * uPointer.w * uDelta * (18.0 / (1.0 + pDist * pDist * 0.15));
+  }
 
-                    void main() {
-                        vec2 uv = gl_FragCoord.xy / ${this.textureSize}.0;
-                        vec3 pos = texture2D(tPos, uv).rgb;
-                        vec3 vel = texture2D(tVel, uv).rgb;
-                        
-                        vec3 force = vec3(0.0);
-                        
-                        // Preset-based forces
-                        if(uPreset == 0.0) { // Nebula
-                            force -= pos * 0.01 * (1.0 + uAudioLow * 5.0);
-                            force += normalize(uMouse - pos) * 0.02 * (1.0 - length(uMouse - pos));
-                        } else if(uPreset == 1.0) { // Wave
-                            force.y += sin(pos.x * 0.5 + uAudioLow * 10.0) * 0.01;
-                            force -= pos * 0.02;
-                        } else if(uPreset == 2.0) { // Singularity
-                            float d = length(pos);
-                            force -= normalize(pos) * (0.1 / (d + 0.1)) * uAudioLow;
-                        } else if(uPreset == 3.0) { // Crystal
-                            force -= pos * 0.05;
-                            force += vec3(round(pos.x * 2.0), round(pos.y * 2.0), round(pos.z * 2.0)) * 0.01;
-                        } else { // Supernova
-                            force += normalize(pos) * uBeat * 0.5;
-                            force -= pos * 0.01;
-                        }
+  if (uBeat > 0.01) {
+    vel += normalize(pos + hashSphere(seed + 2.0) * 0.35) * uBeat * uDelta * (6.0 + uBands.x * 24.0) * (0.45 + hash11(seed + 11.0));
+  }
 
-                        vel += force * uDeltaTime * 60.0;
-                        vel *= 0.98; // friction
-                        gl_FragColor = vec4(vel, 1.0);
-                    }
-                `;
-            }
+  if (uImpulse > 0.01) {
+    vel += normalize(pos - uPointer.xyz + hashSphere(seed + 7.0) * 0.5) * uImpulse * uDelta * 42.0 / (1.0 + pDist * 0.15);
+  }
 
-            getRenderVertexShader() {
-                return `
-                    uniform sampler2D tPos;
-                    uniform float uSize;
-                    uniform float uAudioLow;
-                    varying float vLow;
-                    void main() {
-                        vec3 pos = texture2D(tPos, uv).rgb;
-                        vLow = uAudioLow;
-                        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-                        gl_PointSize = uSize * (1.0 + uAudioLow * 2.0) * (1000.0 / -mvPosition.z);
-                        gl_Position = projectionMatrix * mvPosition;
-                    }
-                `;
-            }
+  float damping = mix(0.992, 0.965, clamp(audioEnergy + uBeat * 0.3, 0.0, 1.0));
+  vel *= pow(damping, uDelta * 60.0);
+  pos += vel * uDelta * (0.9 + uBands.w * 1.4);
+  life -= uDelta * (0.025 + uBands.z * 0.035 + uBeat * 0.02);
 
-            getRenderFragmentShader() {
-                return `
-                    varying float vLow;
-                    uniform float uPreset;
-                    void main() {
-                        float d = length(gl_PointCoord - vec2(0.5));
-                        if(d > 0.5) discard;
-                        
-                        vec3 color = vec3(0.1, 0.4, 0.9);
-                        if(uPreset == 0.0) color = mix(vec3(0.1, 0.2, 0.8), vec3(0.8, 0.2, 0.9), vLow);
-                        else if(uPreset == 1.0) color = mix(vec3(0.1, 0.8, 0.5), vec3(0.1, 0.3, 0.8), vLow);
-                        else if(uPreset == 2.0) color = mix(vec3(0.8, 0.1, 0.1), vec3(1.0, 0.8, 0.2), vLow);
-                        else if(uPreset == 3.0) color = mix(vec3(0.4, 0.4, 0.4), vec3(0.0, 1.0, 1.0), vLow);
-                        else color = mix(vec3(1.0, 0.5, 0.1), vec3(1.0, 1.0, 1.0), vLow);
+  vPosLife = vec4(pos, max(0.0, life));
+  vVelSeed = vec4(vel, seed);
+}`;
 
-                        // HDR Boost for Bloom
-                        color *= (1.0 + vLow * 2.0);
-                        gl_FragColor = vec4(color, 1.0 - d * 2.0);
-                    }
-                `;
-            }
+      const noopFS = `#version 300 es
+precision highp float;
+out vec4 outColor;
+void main() {
+  outColor = vec4(0.0);
+}`;
 
-            update(dt, audio, mouse, presetIdx) {
-                this.posMaterial.uniforms.uDeltaTime.value = dt;
-                this.velMaterial.uniforms.uDeltaTime.value = dt;
-                this.posMaterial.uniforms.uAudioLow.value = audio.frequencyData.low;
-                this.velMaterial.uniforms.uAudioLow.value = audio.frequencyData.low;
-                this.velMaterial.uniforms.uAudioMid.value = audio.frequencyData.mid;
-                this.velMaterial.uniforms.uAudioHigh.value = audio.frequencyData.high;
-                this.velMaterial.uniforms.uBeat.value = audio.beatActive ? 1.0 : 0.0;
-                this.velMaterial.uniforms.uMouse.value.copy(mouse);
-                this.velMaterial.uniforms.uPreset.value = presetIdx;
-                this.posMaterial.uniforms.uPreset.value = presetIdx;
-                
-                this.renderMaterial.uniforms.uAudioLow.value = audio.frequencyData.low;
-                this.renderMaterial.uniforms.uPreset.value = presetIdx;
+      // Render and post shaders keep the draw path custom-shaded without a framework or build step.
+      const renderVS = `#version 300 es
+precision highp float;
+layout(location=0) in vec4 aPosLife;
+layout(location=1) in vec4 aVelSeed;
+uniform mat4 uView;
+uniform mat4 uProjection;
+uniform sampler2D uAudioTex;
+uniform float uTime;
+uniform float uParticleCount;
+uniform float uPointScale;
+uniform float uDpr;
+uniform float uBeat;
+uniform int uPreset;
+uniform vec4 uBands;
+uniform vec4 uFeatures;
+out vec4 vColor;
+const float TAU = 6.28318530718;
 
-                // Execute GPGPU update
-                this.renderer.setRenderTarget(this.renderer.getRenderTarget(this.velB));
-                this.gpgpuQuad.material = this.velMaterial;
-                this.velMaterial.uniforms.tPos.value = this.posA;
-                this.velMaterial.uniforms.tVel.value = this.velA;
-                this.renderer.render(this.gpgpuScene, this.gpgpuCamera);
+vec3 palette(float t) {
+  return 0.5 + 0.5 * cos(TAU * (vec3(0.0, 0.34, 0.67) + t));
+}
 
-                this.renderer.setRenderTarget(this.renderer.getRenderTarget(this.posB));
-                this.gpgpuQuad.material = this.posMaterial;
-                this.posMaterial.uniforms.tPos.value = this.posA;
-                this.posMaterial.uniforms.tVel.value = this.velB;
-                this.renderer.render(this.gpgpuScene, this.gpgpuCamera);
+void main() {
+  float n = (float(gl_VertexID) + 0.5) / max(1.0, uParticleCount);
+  float f = texture(uAudioTex, vec2(fract(n * 7.0 + aVelSeed.w * 0.01), 0.5)).r;
+  vec4 viewPos = uView * vec4(aPosLife.xyz, 1.0);
+  gl_Position = uProjection * viewPos;
 
-                // Swap buffers
-                [this.posA, this.posB] = [this.posB, this.posA];
-                [this.velA, this.velB] = [this.velB, this.velA];
+  float depth = max(2.0, -viewPos.z);
+  float size = uPointScale * uDpr * (1.0 + f * 4.2 + uBands.z * 2.1 + uBeat * 2.8) * (34.0 / depth);
+  gl_PointSize = clamp(size, 1.0, 28.0);
 
-                this.renderMaterial.uniforms.tPos.value = this.posA;
-                this.renderer.setRenderTarget(null);
-            }
-        }
+  vec3 base = palette(n * 0.32 + uFeatures.x * 0.52 + float(uPreset) * 0.085 + f * 0.24 + uTime * 0.015);
+  vec3 cool = vec3(0.08, 0.45, 1.0);
+  vec3 warm = vec3(1.0, 0.26, 0.1);
+  vec3 mood = mix(cool, warm, clamp(uBands.x * 1.25 + uBeat * 0.75, 0.0, 1.0));
+  base = mix(base, mood, 0.42 + uBands.w * 0.2);
+  float alpha = smoothstep(0.0, 0.18, aPosLife.w) * (0.42 + f * 0.7 + uBands.w * 0.5);
+  vColor = vec4(base * (0.65 + f * 1.4 + uBeat * 1.7), alpha);
+}`;
 
-        /**
-         * MAIN APPLICATION
-         */
-        class App {
-            constructor() {
-                this.initScene();
-                this.initAudio();
-                this.initUI();
-                this.initEvents();
-                
-                this.clock = new THREE.Clock();
-                this.mouse = new THREE.Vector3();
-                this.presetIdx = 0;
-                
-                this.animate();
-            }
+      const particleFS = `#version 300 es
+precision highp float;
+in vec4 vColor;
+out vec4 outColor;
+void main() {
+  vec2 p = gl_PointCoord * 2.0 - 1.0;
+  float r2 = dot(p, p);
+  if (r2 > 1.0) discard;
+  float soft = exp(-r2 * 3.1);
+  float core = smoothstep(0.22, 0.0, r2) * 0.65;
+  outColor = vec4(vColor.rgb * (soft + core) * vColor.a, vColor.a * soft);
+}`;
 
-            initScene() {
-                this.scene = new THREE.Scene();
-                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                this.camera.position.z = 20;
+      const quadVS = `#version 300 es
+precision highp float;
+const vec2 POS[3] = vec2[3](vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
+out vec2 vUv;
+void main() {
+  vec2 p = POS[gl_VertexID];
+  vUv = p * 0.5 + 0.5;
+  gl_Position = vec4(p, 0.0, 1.0);
+}`;
 
-                this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-                this.renderer.setSize(window.innerWidth, window.innerHeight);
-                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-                this.renderer.toneMapping = THREE.ReinhardToneMapping;
-                document.body.appendChild(this.renderer.domElement);
+      const backgroundFS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform int uPreset;
+uniform vec4 uBands;
+uniform vec4 uFeatures;
 
-                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-                this.controls.enableDamping = true;
-                this.controls.dampingFactor = 0.05;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
 
-                this.particles = new GPUParticleSystem(this.scene, this.renderer);
-                
-                // Render target helper for GPGPU
-                this.renderer.getRenderTarget = (tex) => {
-                    if (!this.rtMap) this.rtMap = new Map();
-                    if (!this.rtMap.has(tex)) {
-                        const rt = new THREE.WebGLRenderTarget(this.particles.textureSize, this.particles.textureSize, {
-                            minFilter: THREE.NearestFilter,
-                            magFilter: THREE.NearestFilter,
-                            format: THREE.RGBAFormat,
-                            type: THREE.FloatType
-                        });
-                        this.rtMap.set(tex, rt);
-                    }
-                    return this.rtMap.get(tex);
-                };
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + 1.0), u.x), u.y);
+}
 
-                // Post Processing
-                this.composer = new EffectComposer(this.renderer);
-                this.composer.addPass(new RenderPass(this.scene, this.camera));
-                
-                this.bloomPass = new UnrealBloomPass(
-                    new THREE.Vector2(window.innerWidth, window.innerHeight),
-                    1.5, 0.4, 0.85
-                );
-                this.composer.addPass(this.bloomPass);
-            }
+float fbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 5; i++) {
+    v += noise(p) * a;
+    p = p * 2.03 + 11.7;
+    a *= 0.5;
+  }
+  return v;
+}
 
-            initAudio() {
-                this.audio = new AudioAnalyzer();
-            }
+void main() {
+  vec2 uv = vUv;
+  vec2 p = (uv - 0.5) * vec2(uResolution.x / max(1.0, uResolution.y), 1.0);
+  float r = length(p);
+  float a = atan(p.y, p.x);
+  float swirl = fbm(p * (2.0 + uBands.y * 3.0) + vec2(cos(a + uTime * 0.06), sin(a - uTime * 0.04)) * 2.0);
+  float rings = sin(r * (18.0 + uBands.x * 18.0) - uTime * (1.2 + uBands.x * 5.0) + swirl * 4.0) * 0.5 + 0.5;
+  float grid = smoothstep(0.018, 0.0, abs(fract((p.x + p.y * 0.18) * (8.0 + float(uPreset))) - 0.5) - 0.485);
+  vec3 deep = mix(vec3(0.015, 0.018, 0.05), vec3(0.02, 0.04, 0.11), swirl);
+  vec3 spectral = mix(vec3(0.04, 0.18, 0.48), vec3(0.55, 0.12, 0.42), clamp(uBands.x + uFeatures.x, 0.0, 1.0));
+  vec3 col = deep + spectral * (0.12 + rings * 0.16 + uBands.w * 0.28);
+  col += vec3(0.12, 0.38, 0.7) * grid * (0.03 + uBands.z * 0.13);
+  col *= 1.0 - smoothstep(0.2, 1.1, r) * 0.72;
+  outColor = vec4(col, 1.0);
+}`;
 
-            initUI() {
-                this.ui = {
-                    budget: document.getElementById('budget-slider'),
-                    budgetVal: document.getElementById('budget-val'),
-                    vol: document.getElementById('volume-slider'),
-                    volVal: document.getElementById('volume-val'),
-                    sens: document.getElementById('sensitivity-slider'),
-                    sensVal: document.getElementById('sensitivity-val'),
-                    smooth: document.getElementById('smoothing-slider'),
-                    smoothVal: document.getElementById('smoothing-val'),
-                    size: document.getElementById('size-slider'),
-                    sizeVal: document.getElementById('size-val'),
-                    preset: document.getElementById('preset-select'),
-                    playBtn: document.getElementById('play-btn'),
-                    micBtn: document.getElementById('mic-btn'),
-                    fileBtn: document.getElementById('file-btn'),
-                    upload: document.getElementById('audio-upload'),
-                    beatSig: document.getElementById('beat-sig'),
-                    statFps: document.getElementById('stat-fps'),
-                    statPart: document.getElementById('stat-particles'),
-                    statLow: document.getElementById('stat-low'),
-                    statMid: document.getElementById('stat-mid'),
-                    statHigh: document.getElementById('stat-high')
-                };
+      const compositeFS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uScene;
+uniform sampler2D uHistory;
+uniform float uTrail;
+uniform float uBeat;
+void main() {
+  vec3 scene = texture(uScene, vUv).rgb;
+  vec3 history = texture(uHistory, vUv).rgb * uTrail;
+  vec3 flash = vec3(1.0, 0.32, 0.22) * uBeat * 0.035;
+  outColor = vec4(min(scene + history + flash, vec3(8.0)), 1.0);
+}`;
 
-                this.ui.budget.oninput = () => {
-                    this.ui.budgetVal.textContent = (this.ui.budget.value / 1000).toFixed(0) + 'k';
-                    this.particles.particleCount = parseInt(this.ui.budget.value);
-                };
-                this.ui.vol.oninput = () => {
-                    this.audio.settings.volume = parseFloat(this.ui.vol.value);
-                    this.ui.volVal.textContent = Math.round(this.ui.vol.value * 100) + '%';
-                };
-                this.ui.sens.oninput = () => {
-                    this.audio.settings.sensitivity = parseFloat(this.ui.sens.value);
-                    this.ui.sensVal.textContent = Math.round(this.ui.sens.value * 100) + '%';
-                };
-                this.ui.smooth.oninput = () => {
-                    this.audio.settings.smoothing = parseFloat(this.ui.smooth.value);
-                    if(this.audio.analyser) this.audio.analyser.smoothingTimeConstant = this.audio.settings.smoothing;
-                    this.ui.smoothVal.textContent = Math.round(this.ui.smooth.value * 100) + '%';
-                };
-                this.ui.size.oninput = () => {
-                    this.particles.renderMaterial.uniforms.uSize.value = parseFloat(this.ui.size.value);
-                    this.ui.sizeVal.textContent = this.ui.size.value;
-                };
-                this.ui.preset.onchange = () => {
-                    const presets = { nebula: 0, wave: 1, singularity: 2, crystal: 3, supernova: 4 };
-                    this.presetIdx = presets[this.ui.preset.value];
-                };
+      const finalFS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uImage;
+uniform vec2 uResolution;
+uniform float uPostFx;
+uniform float uBeat;
+uniform vec4 uBands;
 
-                this.ui.playBtn.onclick = () => this.audio.togglePlay();
-                this.ui.micBtn.onclick = async () => {
-                    await this.audio.init('mic');
-                };
-                this.ui.fileBtn.onclick = () => this.ui.upload.click();
-                this.ui.upload.onchange = async (e) => {
-                    const file = e.target.files[0];
-                    if (file) await this.audio.init('file', file);
-                };
-            }
+vec3 tonemap(vec3 c) {
+  return 1.0 - exp(-c * 1.18);
+}
 
-            initEvents() {
-                window.addEventListener('resize', () => {
-                    this.camera.aspect = window.innerWidth / window.innerHeight;
-                    this.camera.updateProjectionMatrix();
-                    this.renderer.setSize(window.innerWidth, window.innerHeight);
-                    this.composer.setSize(window.innerWidth, window.innerHeight);
-                });
+void main() {
+  vec2 texel = 1.0 / max(vec2(1.0), uResolution);
+  vec3 col = texture(uImage, vUv).rgb;
+  vec3 bloom = vec3(0.0);
+  for (int i = 0; i < 10; i++) {
+    float a = float(i) * 0.6283185;
+    vec2 dir = vec2(cos(a), sin(a));
+    vec3 b1 = texture(uImage, vUv + dir * texel * 3.5).rgb;
+    vec3 b2 = texture(uImage, vUv + dir * texel * 9.0).rgb;
+    bloom += max(b1 - 0.36, 0.0) * 0.055 + max(b2 - 0.28, 0.0) * 0.035;
+  }
+  col += bloom * uPostFx * (1.0 + uBands.z * 0.8);
+  col = tonemap(col);
+  col = pow(max(col, 0.0), vec3(0.92, 0.96, 1.03));
+  vec2 p = vUv - 0.5;
+  float vignette = smoothstep(0.82, 0.18, dot(p, p) * 1.24);
+  col *= mix(1.0, vignette, 0.42 * uPostFx);
+  col += vec3(0.04, 0.015, 0.01) * uBeat * uPostFx;
+  outColor = vec4(col, 1.0);
+}`;
 
-                window.addEventListener('keydown', (e) => {
-                    if (e.code === 'Space') this.audio.togglePlay();
-                    if (e.code === 'KeyF') {
-                        if (!document.fullscreenElement) this.renderer.domElement.requestFullscreen();
-                        else document.exitFullscreen();
-                    }
-                    if (e.code === 'KeyH') {
-                        document.querySelectorAll('.panel').forEach(p => p.classList.toggle('hidden'));
-                    }
-                    if (e.code === 'KeyM') {
-                        this.audio.init('mic');
-                    }
-                });
+      function setStatus(message) {
+        ui.statusLine.textContent = message;
+      }
 
-                window.addEventListener('mousemove', (e) => {
-                    this.mouse.set(
-                        (e.clientX / window.innerWidth) * 2 - 1,
-                        -(e.clientY / window.innerHeight) * 2 + 1,
-                        0
-                    ).multiplyScalar(10);
-                });
+      function prettyCount(value) {
+        if (value >= 1000000) return '1M';
+        return Math.round(value / 1000) + 'k';
+      }
 
-                // Drag and Drop
-                window.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    document.getElementById('drop-zone').style.display = 'flex';
-                });
-                window.addEventListener('dragleave', () => {
-                    document.getElementById('drop-zone').style.display = 'none';
-                });
-                window.addEventListener('drop', async (e) => {
-                    e.preventDefault();
-                    document.getElementById('drop-zone').style.display = 'none';
-                    const file = e.dataTransfer.files[0];
-                    if (file && file.type.startsWith('audio/')) {
-                        await this.audio.init('file', file);
-                    }
-                });
-            }
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
 
-            animate() {
-                requestAnimationFrame(() => this.animate());
-                
-                const dt = this.clock.getDelta();
-                this.audio.update();
-                
-                this.particles.update(dt, this.audio, this.mouse, this.presetIdx);
-                
-                if (document.getElementById('autocam-toggle').checked) {
-                    const time = Date.now() * 0.0005;
-                    this.camera.position.x = Math.sin(time) * 20;
-                    this.camera.position.z = Math.cos(time) * 20;
-                    this.camera.lookAt(0, 0, 0);
-                } else {
-                    this.controls.update();
-                }
+      function lerp(a, b, t) {
+        return a + (b - a) * t;
+      }
 
-                if (document.getElementById('postfx-toggle').checked) {
-                    this.composer.render();
-                } else {
-                    this.renderer.render(this.scene, this.camera);
-                }
-                this.updateStats(dt);
-            }
+      function initGL() {
+        const gl = canvas.getContext('webgl2', {
+          alpha: false,
+          antialias: false,
+          depth: false,
+          stencil: false,
+          preserveDrawingBuffer: false,
+          powerPreference: 'high-performance'
+        });
 
-            updateStats(dt) {
-                this.ui.statFps.textContent = Math.round(1 / dt);
-                this.ui.statPart.textContent = (this.particles.particleCount / 1000).toFixed(0) + 'k';
-                this.ui.statLow.textContent = this.audio.frequencyData.low.toFixed(2);
-                this.ui.statMid.textContent = this.audio.frequencyData.mid.toFixed(2);
-                this.ui.statHigh.textContent = this.audio.frequencyData.high.toFixed(2);
-                
-                if (this.audio.beatActive) {
-                    this.ui.beatSig.classList.add('beat-active');
-                } else {
-                    this.ui.beatSig.classList.remove('beat-active');
-                }
-            }
+        if (!gl) {
+          ui.unsupported.classList.remove('hidden');
+          ui.unsupported.classList.add('flex');
+          setStatus('WebGL2 is not available in this browser.');
+          return false;
         }
 
-        new App();
-    </script>
+        state.gl = gl;
+        gl.getExtension('EXT_color_buffer_float');
+        gl.disable(gl.DEPTH_TEST);
+        gl.disable(gl.CULL_FACE);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+
+        programs.update = createProgram(gl, updateVS, noopFS, ['vPosLife', 'vVelSeed']);
+        programs.render = createProgram(gl, renderVS, particleFS);
+        programs.background = createProgram(gl, quadVS, backgroundFS);
+        programs.composite = createProgram(gl, quadVS, compositeFS);
+        programs.final = createProgram(gl, quadVS, finalFS);
+        cacheUniforms();
+
+        quadVao = gl.createVertexArray();
+        audioTexture = createAudioTexture(gl);
+        chooseDefaultParticleBudget(gl);
+        createParticleSystem(state.requestedParticleCount);
+        resize();
+        state.ready = true;
+        setStatus('Ready. Drop an audio file or start the microphone.');
+        return true;
+      }
+
+      function chooseDefaultParticleBudget(gl) {
+        let renderer = '';
+        const debug = gl.getExtension('WEBGL_debug_renderer_info');
+        if (debug) renderer = String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) || '').toLowerCase();
+        const integrated = /intel|uhd|iris|apple|mali|adreno|radeon graphics/.test(renderer);
+        state.requestedParticleCount = integrated ? 131072 : 262144;
+        state.particleCount = state.requestedParticleCount;
+        ui.particleSelect.value = String(state.particleCount);
+        ui.particleReadout.textContent = prettyCount(state.particleCount);
+      }
+
+      function compileShader(gl, type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          const message = gl.getShaderInfoLog(shader) || 'Unknown shader compile error';
+          gl.deleteShader(shader);
+          throw new Error(message);
+        }
+        return shader;
+      }
+
+      function createProgram(gl, vsSource, fsSource, varyings) {
+        const program = gl.createProgram();
+        const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
+        const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        if (varyings) gl.transformFeedbackVaryings(program, varyings, gl.SEPARATE_ATTRIBS);
+        gl.linkProgram(program);
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          const message = gl.getProgramInfoLog(program) || 'Unknown program link error';
+          gl.deleteProgram(program);
+          throw new Error(message);
+        }
+        return program;
+      }
+
+      function cacheUniforms() {
+        const gl = state.gl;
+        const define = (name, keys) => {
+          programs[name].u = {};
+          keys.forEach((key) => {
+            programs[name].u[key] = gl.getUniformLocation(programs[name], key);
+          });
+        };
+        define('update', ['uAudioTex', 'uTime', 'uDelta', 'uParticleCount', 'uBeat', 'uImpulse', 'uPreset', 'uBands', 'uFeatures', 'uPointer']);
+        define('render', ['uView', 'uProjection', 'uAudioTex', 'uTime', 'uParticleCount', 'uPointScale', 'uDpr', 'uBeat', 'uPreset', 'uBands', 'uFeatures']);
+        define('background', ['uResolution', 'uTime', 'uPreset', 'uBands', 'uFeatures']);
+        define('composite', ['uScene', 'uHistory', 'uTrail', 'uBeat']);
+        define('final', ['uImage', 'uResolution', 'uPostFx', 'uBeat', 'uBands']);
+      }
+
+      function createAudioTexture(gl) {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 512, 1, 0, gl.RED, gl.UNSIGNED_BYTE, audio.textureData);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        return tex;
+      }
+
+      function createParticleSystem(count) {
+        const gl = state.gl;
+        if (!gl) return;
+        deleteParticleSystem();
+
+        // Two copies of state buffers are ping-ponged so transform feedback never reads and writes the same buffer.
+        state.particleCount = count;
+        state.readIndex = 0;
+        const posLife = new Float32Array(count * 4);
+        const velSeed = new Float32Array(count * 4);
+
+        let seed = 1337;
+        const rnd = () => {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          return seed / 4294967296;
+        };
+
+        for (let i = 0; i < count; i++) {
+          const i4 = i * 4;
+          const z = rnd() * 2 - 1;
+          const angle = rnd() * Math.PI * 2;
+          const radius = Math.cbrt(rnd()) * 8;
+          const xy = Math.sqrt(Math.max(0, 1 - z * z));
+          posLife[i4] = Math.cos(angle) * xy * radius;
+          posLife[i4 + 1] = Math.sin(angle) * xy * radius;
+          posLife[i4 + 2] = z * radius;
+          posLife[i4 + 3] = 0.2 + rnd() * 1.2;
+          velSeed[i4] = (rnd() - 0.5) * 0.12;
+          velSeed[i4 + 1] = (rnd() - 0.5) * 0.12;
+          velSeed[i4 + 2] = (rnd() - 0.5) * 0.12;
+          velSeed[i4 + 3] = rnd() * 10000 + i * 0.013;
+        }
+
+        buffers.posLife = [gl.createBuffer(), gl.createBuffer()];
+        buffers.velSeed = [gl.createBuffer(), gl.createBuffer()];
+        buffers.updateVaos = [gl.createVertexArray(), gl.createVertexArray()];
+        buffers.renderVaos = [gl.createVertexArray(), gl.createVertexArray()];
+        buffers.transform = gl.createTransformFeedback();
+
+        for (let i = 0; i < 2; i++) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffers.posLife[i]);
+          gl.bufferData(gl.ARRAY_BUFFER, posLife, gl.DYNAMIC_COPY);
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffers.velSeed[i]);
+          gl.bufferData(gl.ARRAY_BUFFER, velSeed, gl.DYNAMIC_COPY);
+
+          gl.bindVertexArray(buffers.updateVaos[i]);
+          bindParticleAttributes(gl, buffers.posLife[i], buffers.velSeed[i]);
+          gl.bindVertexArray(buffers.renderVaos[i]);
+          bindParticleAttributes(gl, buffers.posLife[i], buffers.velSeed[i]);
+        }
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        ui.particleReadout.textContent = prettyCount(count);
+        ui.hudParticles.textContent = prettyCount(count);
+        setStatus('Particle budget set to ' + prettyCount(count) + '.');
+      }
+
+      function bindParticleAttributes(gl, posBuffer, velBuffer) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, velBuffer);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
+      }
+
+      function deleteParticleSystem() {
+        const gl = state.gl;
+        if (!gl || !buffers.posLife) return;
+        [...buffers.posLife, ...buffers.velSeed].forEach((buffer) => gl.deleteBuffer(buffer));
+        [...buffers.updateVaos, ...buffers.renderVaos].forEach((vao) => gl.deleteVertexArray(vao));
+        gl.deleteTransformFeedback(buffers.transform);
+        buffers = {};
+      }
+
+      function resize() {
+        const gl = state.gl;
+        if (!gl) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const width = Math.max(2, Math.floor(window.innerWidth * dpr));
+        const height = Math.max(2, Math.floor(window.innerHeight * dpr));
+        if (canvas.width === width && canvas.height === height && targets.scene) return;
+
+        canvas.width = width;
+        canvas.height = height;
+        state.width = width;
+        state.height = height;
+        state.dpr = dpr;
+        createTargets(width, height);
+      }
+
+      function createTargets(width, height) {
+        const gl = state.gl;
+        if (targets.scene) {
+          [targets.scene, targets.history[0], targets.history[1]].forEach((target) => {
+            gl.deleteFramebuffer(target.fbo);
+            gl.deleteTexture(target.texture);
+          });
+        }
+
+        const make = () => {
+          const texture = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          const fbo = gl.createFramebuffer();
+          gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+          return { texture, fbo };
+        };
+
+        targets.scene = make();
+        targets.history = [make(), make()];
+        targets.historyRead = 0;
+        targets.historyWrite = 1;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+
+      async function ensureAudioContext() {
+        if (!audio.context) {
+          const Ctor = window.AudioContext || window.webkitAudioContext;
+          if (!Ctor) throw new Error('Web Audio API is not available.');
+          audio.context = new Ctor();
+          audio.analyser = audio.context.createAnalyser();
+          audio.analyser.fftSize = 2048;
+          audio.analyser.minDecibels = -92;
+          audio.analyser.maxDecibels = -8;
+          audio.analyser.smoothingTimeConstant = state.smoothing;
+          audio.gain = audio.context.createGain();
+          audio.gain.gain.value = state.volume;
+          audio.frequencyData = new Uint8Array(audio.analyser.frequencyBinCount);
+          audio.timeData = new Uint8Array(audio.analyser.fftSize);
+        }
+        if (audio.context.state !== 'running') await audio.context.resume();
+      }
+
+      function disconnectAudioGraph(stopMic) {
+        try { if (audio.elementSource) audio.elementSource.disconnect(); } catch (error) {}
+        try { if (audio.micSource) audio.micSource.disconnect(); } catch (error) {}
+        try { if (audio.gain) audio.gain.disconnect(); } catch (error) {}
+        try { if (audio.analyser) audio.analyser.disconnect(); } catch (error) {}
+        audio.connectedToDestination = false;
+        audioElement.pause();
+        if (stopMic && audio.micStream) {
+          audio.micStream.getTracks().forEach((track) => track.stop());
+          audio.micStream = null;
+          audio.micSource = null;
+        }
+      }
+
+      async function startMicrophone() {
+        try {
+          await ensureAudioContext();
+          disconnectAudioGraph(true);
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('getUserMedia requires HTTPS, localhost, and a supported browser.');
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+          audio.micStream = stream;
+          audio.micSource = audio.context.createMediaStreamSource(stream);
+          audio.micSource.connect(audio.gain);
+          audio.gain.connect(audio.analyser);
+          audio.sourceType = 'Mic';
+          audio.paused = false;
+          setStatus('Microphone is driving the particle field.');
+          updatePlayButton();
+        } catch (error) {
+          setStatus('Microphone failed: ' + error.message);
+        }
+      }
+
+      async function loadAudioFile(file) {
+        if (!file) return;
+        try {
+          await ensureAudioContext();
+          disconnectAudioGraph(true);
+          if (!audio.elementSource) audio.elementSource = audio.context.createMediaElementSource(audioElement);
+          if (audio.objectUrl) URL.revokeObjectURL(audio.objectUrl);
+          audio.objectUrl = URL.createObjectURL(file);
+          audioElement.src = audio.objectUrl;
+          audioElement.loop = true;
+          audio.elementSource.connect(audio.gain);
+          audio.gain.connect(audio.analyser);
+          audio.analyser.connect(audio.context.destination);
+          audio.connectedToDestination = true;
+          audio.sourceType = file.name.replace(/\.[^/.]+$/, '').slice(0, 24) || 'File';
+          audio.paused = false;
+          await audioElement.play();
+          setStatus('Playing ' + file.name + '.');
+          updatePlayButton();
+        } catch (error) {
+          setStatus('Audio file failed: ' + error.message);
+        }
+      }
+
+      async function togglePlayPause() {
+        try {
+          if (!audio.context) await ensureAudioContext();
+          if (audio.context.state !== 'running') await audio.context.resume();
+
+          if (audio.sourceType !== 'Idle' && audioElement.src && audio.connectedToDestination) {
+            if (audioElement.paused) {
+              await audioElement.play();
+              audio.paused = false;
+              setStatus('Playback resumed.');
+            } else {
+              audioElement.pause();
+              audio.paused = true;
+              setStatus('Playback paused.');
+            }
+          } else if (audio.sourceType === 'Mic') {
+            audio.paused = !audio.paused;
+            audio.gain.gain.setTargetAtTime(audio.paused ? 0 : state.volume, audio.context.currentTime, 0.02);
+            setStatus(audio.paused ? 'Microphone analysis muted.' : 'Microphone analysis resumed.');
+          } else {
+            setStatus('Load a track or start the microphone first.');
+          }
+          updatePlayButton();
+        } catch (error) {
+          setStatus('Audio toggle failed: ' + error.message);
+        }
+      }
+
+      function updatePlayButton() {
+        ui.playBtn.textContent = audio.paused ? 'Resume' : 'Play / Pause';
+        ui.sourceReadout.textContent = audio.sourceType;
+      }
+
+      function updateAudioFeatures(time, dt) {
+        if (audio.analyser && !audio.paused && audio.sourceType !== 'Idle') {
+          audio.analyser.smoothingTimeConstant = state.smoothing;
+          audio.analyser.getByteFrequencyData(audio.frequencyData);
+          audio.analyser.getByteTimeDomainData(audio.timeData);
+
+          const nyquist = audio.context.sampleRate * 0.5;
+          const binHz = nyquist / audio.frequencyData.length;
+          let lowSum = 0;
+          let lowCount = 0;
+          let midSum = 0;
+          let midCount = 0;
+          let highSum = 0;
+          let highCount = 0;
+          let spectralSum = 0;
+          let weighted = 0;
+          let geo = 0;
+          let arith = 0;
+
+          for (let i = 0; i < audio.frequencyData.length; i++) {
+            const amp = audio.frequencyData[i] / 255;
+            const hz = i * binHz;
+            if (hz < 220) {
+              lowSum += amp;
+              lowCount++;
+            } else if (hz < 2200) {
+              midSum += amp;
+              midCount++;
+            } else {
+              highSum += amp;
+              highCount++;
+            }
+            spectralSum += amp;
+            weighted += amp * hz;
+            geo += Math.log(Math.max(1e-4, amp));
+            arith += amp;
+          }
+
+          let rms = 0;
+          for (let i = 0; i < audio.timeData.length; i++) {
+            const centered = (audio.timeData[i] - 128) / 128;
+            rms += centered * centered;
+          }
+          rms = Math.sqrt(rms / audio.timeData.length);
+
+          audio.low = lerp(audio.low, lowSum / Math.max(1, lowCount), 0.32);
+          audio.mid = lerp(audio.mid, midSum / Math.max(1, midCount), 0.26);
+          audio.high = lerp(audio.high, highSum / Math.max(1, highCount), 0.22);
+          audio.rms = lerp(audio.rms, rms, 0.35);
+          audio.centroid = lerp(audio.centroid, spectralSum > 0.001 ? weighted / spectralSum / nyquist : 0, 0.18);
+          audio.flatness = lerp(audio.flatness, Math.exp(geo / audio.frequencyData.length) / Math.max(1e-4, arith / audio.frequencyData.length), 0.12);
+          audio.onset = Math.max(0, audio.rms - audio.previousRms * 1.08);
+          audio.previousRms = lerp(audio.previousRms, audio.rms, 0.2);
+
+          audio.fastLow = lerp(audio.fastLow, audio.low, 0.32);
+          audio.slowLow = lerp(audio.slowLow, audio.low, 0.035);
+          const threshold = 1.42 - state.sensitivity * 0.55;
+          const canBeat = time - audio.lastBeatTime > 0.18;
+          if (canBeat && audio.fastLow > audio.slowLow * threshold && audio.low > 0.08) {
+            audio.beat = 1;
+            state.beatFlash = 1;
+            audio.lastBeatTime = time;
+          } else {
+            audio.beat = Math.max(0, audio.beat - dt * 5.5);
+          }
+
+          for (let i = 0; i < 512; i++) {
+            const index = Math.min(audio.frequencyData.length - 1, Math.floor((i / 511) * (audio.frequencyData.length - 1)));
+            audio.textureData[i] = audio.frequencyData[index];
+          }
+        } else {
+          const idleLow = 0.12 + Math.pow(Math.sin(time * 1.1) * 0.5 + 0.5, 8) * 0.35;
+          const idleMid = 0.08 + (Math.sin(time * 0.73 + 2.1) * 0.5 + 0.5) * 0.12;
+          const idleHigh = 0.06 + (Math.sin(time * 1.9 + 1.4) * 0.5 + 0.5) * 0.08;
+          audio.low = lerp(audio.low, idleLow, 0.025);
+          audio.mid = lerp(audio.mid, idleMid, 0.025);
+          audio.high = lerp(audio.high, idleHigh, 0.025);
+          audio.rms = lerp(audio.rms, 0.11, 0.02);
+          audio.centroid = lerp(audio.centroid, 0.42 + Math.sin(time * 0.1) * 0.12, 0.02);
+          audio.flatness = lerp(audio.flatness, 0.42, 0.02);
+          audio.onset = 0;
+          audio.beat = Math.max(0, audio.beat - dt * 5.5);
+          for (let i = 0; i < 512; i++) {
+            const v = (Math.sin(i * 0.035 + time * 2.2) * 0.5 + 0.5) * 50 + audio.low * 95 * Math.exp(-i / 95);
+            audio.textureData[i] = clamp(v, 0, 255);
+          }
+        }
+
+        state.beatFlash = Math.max(0, state.beatFlash - dt * 4.2);
+        state.impulse = Math.max(0, state.impulse - dt * 3.5);
+      }
+
+      function uploadAudioTexture() {
+        const gl = state.gl;
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, audioTexture);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 512, 1, gl.RED, gl.UNSIGNED_BYTE, audio.textureData);
+      }
+
+      function updateParticles(time, dt) {
+        const gl = state.gl;
+        const writeIndex = 1 - state.readIndex;
+        gl.useProgram(programs.update);
+        gl.uniform1i(programs.update.u.uAudioTex, 0);
+        gl.uniform1f(programs.update.u.uTime, time);
+        gl.uniform1f(programs.update.u.uDelta, Math.min(dt, 0.033));
+        gl.uniform1f(programs.update.u.uParticleCount, state.particleCount);
+        gl.uniform1f(programs.update.u.uBeat, state.beatFlash);
+        gl.uniform1f(programs.update.u.uImpulse, state.impulse);
+        gl.uniform1i(programs.update.u.uPreset, state.preset);
+        gl.uniform4f(programs.update.u.uBands, audio.low, audio.mid, audio.high, audio.rms);
+        gl.uniform4f(programs.update.u.uFeatures, audio.centroid, audio.flatness, audio.onset, 0);
+        gl.uniform4f(programs.update.u.uPointer, state.pointer.world[0], state.pointer.world[1], state.pointer.world[2], state.pointer.strength);
+
+        // Rasterization is discarded here; the vertex shader acts as a WebGL2 compute pass.
+        gl.bindVertexArray(buffers.updateVaos[state.readIndex]);
+        gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, buffers.transform);
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, buffers.posLife[writeIndex]);
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 1, buffers.velSeed[writeIndex]);
+        gl.enable(gl.RASTERIZER_DISCARD);
+        gl.beginTransformFeedback(gl.POINTS);
+        gl.drawArrays(gl.POINTS, 0, state.particleCount);
+        gl.endTransformFeedback();
+        gl.disable(gl.RASTERIZER_DISCARD);
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+        gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 1, null);
+        gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+        gl.bindVertexArray(null);
+        state.readIndex = writeIndex;
+      }
+
+      function render(time, dt) {
+        const gl = state.gl;
+        resize();
+        updateCamera(time, dt);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, targets.scene.fbo);
+        gl.viewport(0, 0, state.width, state.height);
+        gl.disable(gl.BLEND);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.bindVertexArray(quadVao);
+        gl.useProgram(programs.background);
+        gl.uniform2f(programs.background.u.uResolution, state.width, state.height);
+        gl.uniform1f(programs.background.u.uTime, time);
+        gl.uniform1i(programs.background.u.uPreset, state.preset);
+        gl.uniform4f(programs.background.u.uBands, audio.low, audio.mid, audio.high, audio.rms);
+        gl.uniform4f(programs.background.u.uFeatures, audio.centroid, audio.flatness, audio.onset, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE);
+        gl.useProgram(programs.render);
+        gl.uniformMatrix4fv(programs.render.u.uView, false, state.view);
+        gl.uniformMatrix4fv(programs.render.u.uProjection, false, state.projection);
+        gl.uniform1i(programs.render.u.uAudioTex, 0);
+        gl.uniform1f(programs.render.u.uTime, time);
+        gl.uniform1f(programs.render.u.uParticleCount, state.particleCount);
+        gl.uniform1f(programs.render.u.uPointScale, state.pointScale);
+        gl.uniform1f(programs.render.u.uDpr, state.dpr);
+        gl.uniform1f(programs.render.u.uBeat, state.beatFlash);
+        gl.uniform1i(programs.render.u.uPreset, state.preset);
+        gl.uniform4f(programs.render.u.uBands, audio.low, audio.mid, audio.high, audio.rms);
+        gl.uniform4f(programs.render.u.uFeatures, audio.centroid, audio.flatness, audio.onset, 0);
+        gl.bindVertexArray(buffers.renderVaos[state.readIndex]);
+        gl.drawArrays(gl.POINTS, 0, state.particleCount);
+        gl.disable(gl.BLEND);
+        gl.bindVertexArray(null);
+
+        const read = targets.history[targets.historyRead];
+        const write = targets.history[targets.historyWrite];
+        gl.bindFramebuffer(gl.FRAMEBUFFER, write.fbo);
+        gl.viewport(0, 0, state.width, state.height);
+        gl.useProgram(programs.composite);
+        gl.bindVertexArray(quadVao);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, targets.scene.texture);
+        gl.uniform1i(programs.composite.u.uScene, 0);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, read.texture);
+        gl.uniform1i(programs.composite.u.uHistory, 1);
+        const trail = state.postFx ? clamp(0.82 - audio.high * 0.22 + audio.rms * 0.06, 0.58, 0.9) : 0.04;
+        gl.uniform1f(programs.composite.u.uTrail, trail);
+        gl.uniform1f(programs.composite.u.uBeat, state.beatFlash);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, state.width, state.height);
+        gl.useProgram(programs.final);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, write.texture);
+        gl.uniform1i(programs.final.u.uImage, 0);
+        gl.uniform2f(programs.final.u.uResolution, state.width, state.height);
+        gl.uniform1f(programs.final.u.uPostFx, state.postFx ? 1 : 0);
+        gl.uniform1f(programs.final.u.uBeat, state.beatFlash);
+        gl.uniform4f(programs.final.u.uBands, audio.low, audio.mid, audio.high, audio.rms);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        const oldRead = targets.historyRead;
+        targets.historyRead = targets.historyWrite;
+        targets.historyWrite = oldRead;
+      }
+
+      function updateCamera(time, dt) {
+        if (state.autoCamera) {
+          state.camera.yaw += dt * (0.06 + audio.centroid * 0.13);
+          state.camera.pitch = Math.sin(time * 0.19) * 0.22 + (audio.high - 0.15) * 0.18;
+          const targetDistance = 29 - audio.low * 8.5 + audio.high * 5.0;
+          state.camera.distance = lerp(state.camera.distance, clamp(targetDistance, 14, 48), 0.045);
+        }
+
+        const cp = Math.cos(state.camera.pitch);
+        const eye = [
+          Math.sin(state.camera.yaw) * cp * state.camera.distance,
+          Math.sin(state.camera.pitch) * state.camera.distance,
+          Math.cos(state.camera.yaw) * cp * state.camera.distance
+        ];
+        state.camera.eye = eye;
+        lookAt(state.view, eye, [0, 0, 0], [0, 1, 0]);
+        perspective(state.projection, Math.PI / 3.05, state.width / state.height, 0.1, 220);
+
+        const forward = normalize([-eye[0], -eye[1], -eye[2]]);
+        const right = normalize(cross(forward, [0, 1, 0]));
+        const up = normalize(cross(right, forward));
+        state.camera.right = right;
+        state.camera.up = up;
+        updatePointerWorld();
+      }
+
+      function updatePointerWorld() {
+        const aspect = state.width / Math.max(1, state.height);
+        const scale = state.camera.distance * 0.5;
+        const right = state.camera.right;
+        const up = state.camera.up;
+        state.pointer.world[0] = right[0] * state.pointer.x * scale * aspect + up[0] * state.pointer.y * scale;
+        state.pointer.world[1] = right[1] * state.pointer.x * scale * aspect + up[1] * state.pointer.y * scale;
+        state.pointer.world[2] = right[2] * state.pointer.x * scale * aspect + up[2] * state.pointer.y * scale;
+      }
+
+      function perspective(out, fovy, aspect, near, far) {
+        const f = 1 / Math.tan(fovy / 2);
+        out[0] = f / aspect;
+        out[1] = 0;
+        out[2] = 0;
+        out[3] = 0;
+        out[4] = 0;
+        out[5] = f;
+        out[6] = 0;
+        out[7] = 0;
+        out[8] = 0;
+        out[9] = 0;
+        out[10] = (far + near) / (near - far);
+        out[11] = -1;
+        out[12] = 0;
+        out[13] = 0;
+        out[14] = (2 * far * near) / (near - far);
+        out[15] = 0;
+      }
+
+      function lookAt(out, eye, center, up) {
+        const z = normalize([eye[0] - center[0], eye[1] - center[1], eye[2] - center[2]]);
+        const x = normalize(cross(up, z));
+        const y = cross(z, x);
+        out[0] = x[0];
+        out[1] = y[0];
+        out[2] = z[0];
+        out[3] = 0;
+        out[4] = x[1];
+        out[5] = y[1];
+        out[6] = z[1];
+        out[7] = 0;
+        out[8] = x[2];
+        out[9] = y[2];
+        out[10] = z[2];
+        out[11] = 0;
+        out[12] = -dot(x, eye);
+        out[13] = -dot(y, eye);
+        out[14] = -dot(z, eye);
+        out[15] = 1;
+      }
+
+      function cross(a, b) {
+        return [
+          a[1] * b[2] - a[2] * b[1],
+          a[2] * b[0] - a[0] * b[2],
+          a[0] * b[1] - a[1] * b[0]
+        ];
+      }
+
+      function dot(a, b) {
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+      }
+
+      function normalize(v) {
+        const length = Math.hypot(v[0], v[1], v[2]) || 1;
+        return [v[0] / length, v[1] / length, v[2] / length];
+      }
+
+      function setupUI() {
+        ui.micBtn.addEventListener('click', startMicrophone);
+        ui.fileInput.addEventListener('change', (event) => loadAudioFile(event.target.files[0]));
+        ui.playBtn.addEventListener('click', togglePlayPause);
+        ui.fullscreenBtn.addEventListener('click', toggleFullscreen);
+        ui.guideBtn.addEventListener('click', () => ui.guideModal.classList.add('modal-open'));
+        ui.closeGuideBtn.addEventListener('click', () => ui.guideModal.classList.remove('modal-open'));
+        ui.hideBtn.addEventListener('click', toggleUI);
+        ui.showUiHint.addEventListener('click', toggleUI);
+
+        ui.presetSelect.addEventListener('change', () => setPreset(Number(ui.presetSelect.value)));
+        ui.particleSelect.addEventListener('change', () => createParticleSystem(Number(ui.particleSelect.value)));
+        ui.volumeRange.addEventListener('input', () => {
+          state.volume = Number(ui.volumeRange.value);
+          ui.volumeReadout.textContent = Math.round(state.volume * 100) + '%';
+          if (audio.gain && !audio.paused) audio.gain.gain.setTargetAtTime(state.volume, audio.context.currentTime, 0.02);
+        });
+        ui.sensitivityRange.addEventListener('input', () => {
+          state.sensitivity = Number(ui.sensitivityRange.value);
+          ui.sensitivityReadout.textContent = Math.round(state.sensitivity * 100) + '%';
+        });
+        ui.smoothingRange.addEventListener('input', () => {
+          state.smoothing = Number(ui.smoothingRange.value);
+          ui.smoothingReadout.textContent = Math.round(state.smoothing * 100) + '%';
+        });
+        ui.pointRange.addEventListener('input', () => {
+          state.pointScale = Number(ui.pointRange.value);
+          ui.pointReadout.textContent = state.pointScale.toFixed(1);
+        });
+        ui.postToggle.addEventListener('change', () => {
+          state.postFx = ui.postToggle.checked;
+        });
+        ui.autoCameraToggle.addEventListener('change', () => {
+          state.autoCamera = ui.autoCameraToggle.checked;
+        });
+
+        window.addEventListener('resize', resize);
+        window.addEventListener('keydown', handleKeys);
+        window.addEventListener('dragover', (event) => event.preventDefault());
+        window.addEventListener('drop', (event) => {
+          event.preventDefault();
+          const file = [...event.dataTransfer.files].find((item) => item.type.startsWith('audio/'));
+          if (file) loadAudioFile(file);
+        });
+
+        canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+        canvas.addEventListener('pointermove', handlePointerMove);
+        canvas.addEventListener('pointerdown', handlePointerDown);
+        window.addEventListener('pointerup', handlePointerUp);
+        canvas.addEventListener('wheel', handleWheel, { passive: false });
+      }
+
+      function setPreset(index) {
+        state.preset = (index + presetNames.length) % presetNames.length;
+        ui.presetSelect.value = String(state.preset);
+        ui.presetName.textContent = presetNames[state.preset];
+        state.impulse = 1;
+        setStatus('Preset changed to ' + presetNames[state.preset] + '.');
+      }
+
+      function toggleUI() {
+        state.uiHidden = !state.uiHidden;
+        app.classList.toggle('ui-hidden', state.uiHidden);
+      }
+
+      function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch((error) => setStatus('Fullscreen failed: ' + error.message));
+        } else {
+          document.exitFullscreen();
+        }
+      }
+
+      function handleKeys(event) {
+        const tag = document.activeElement && document.activeElement.tagName;
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+        if (event.code === 'Space') {
+          event.preventDefault();
+          togglePlayPause();
+        }
+        if (event.key.toLowerCase() === 'f') toggleFullscreen();
+        if (event.key.toLowerCase() === 'p') setPreset(state.preset + 1);
+        if (event.key.toLowerCase() === 'h') toggleUI();
+        if (event.key.toLowerCase() === 'g') ui.guideModal.classList.toggle('modal-open');
+        if (event.key.toLowerCase() === 'r') {
+          state.camera.yaw = 0.72;
+          state.camera.pitch = 0.2;
+          state.camera.distance = 29;
+          setStatus('Camera reset.');
+        }
+      }
+
+      function handlePointerMove(event) {
+        const rect = canvas.getBoundingClientRect();
+        state.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        state.pointer.y = (1 - (event.clientY - rect.top) / rect.height) * 2 - 1;
+        updatePointerWorld();
+
+        if (state.pointer.rotate) {
+          const dx = event.clientX - state.pointer.lastX;
+          const dy = event.clientY - state.pointer.lastY;
+          state.camera.yaw -= dx * 0.006;
+          state.camera.pitch = clamp(state.camera.pitch - dy * 0.006, -1.2, 1.2);
+          state.autoCamera = false;
+          ui.autoCameraToggle.checked = false;
+        }
+
+        state.pointer.lastX = event.clientX;
+        state.pointer.lastY = event.clientY;
+        if (!state.pointer.down) state.pointer.strength = lerp(state.pointer.strength, -0.34, 0.22);
+      }
+
+      function handlePointerDown(event) {
+        canvas.setPointerCapture(event.pointerId);
+        state.pointer.down = true;
+        state.pointer.rotate = event.shiftKey || event.button === 2;
+        state.pointer.lastX = event.clientX;
+        state.pointer.lastY = event.clientY;
+        state.pointer.strength = state.pointer.rotate ? 0 : (event.altKey || event.metaKey ? 1.4 : -1.25);
+        state.impulse = state.pointer.rotate ? state.impulse : 1;
+      }
+
+      function handlePointerUp() {
+        state.pointer.down = false;
+        state.pointer.rotate = false;
+        state.pointer.strength = -0.2;
+      }
+
+      function handleWheel(event) {
+        event.preventDefault();
+        state.camera.distance = clamp(state.camera.distance + event.deltaY * 0.018, 10, 70);
+        state.autoCamera = false;
+        ui.autoCameraToggle.checked = false;
+      }
+
+      function updateHud() {
+        ui.lowBar.style.width = Math.round(clamp(audio.low, 0, 1) * 100) + '%';
+        ui.midBar.style.width = Math.round(clamp(audio.mid, 0, 1) * 100) + '%';
+        ui.highBar.style.width = Math.round(clamp(audio.high, 0, 1) * 100) + '%';
+        ui.lowText.textContent = audio.low.toFixed(2);
+        ui.midText.textContent = audio.mid.toFixed(2);
+        ui.highText.textContent = audio.high.toFixed(2);
+        ui.fpsReadout.textContent = Math.round(state.fpsAverage);
+        ui.hudParticles.textContent = prettyCount(state.particleCount);
+        ui.sourceReadout.textContent = audio.sourceType;
+        ui.beatDot.classList.toggle('hot', state.beatFlash > 0.62);
+      }
+
+      function maybeReduceParticleBudget() {
+        if (state.fpsAverage >= 42 || state.particleCount <= 65536) {
+          state.lowFpsFrames = 0;
+          return;
+        }
+        state.lowFpsFrames++;
+        if (state.lowFpsFrames > 240) {
+          const budgets = [65536, 131072, 262144, 524288, 1048576];
+          const index = budgets.indexOf(state.particleCount);
+          if (index > 0) {
+            const next = budgets[index - 1];
+            ui.particleSelect.value = String(next);
+            createParticleSystem(next);
+            setStatus('Low FPS detected. Particle budget reduced to ' + prettyCount(next) + '.');
+          }
+          state.lowFpsFrames = 0;
+        }
+      }
+
+      function loop(nowMs) {
+        const time = nowMs * 0.001;
+        const dt = state.lastTime ? Math.min(0.05, time - state.lastTime) : 0.016;
+        state.lastTime = time;
+        state.fps = 1 / Math.max(0.001, dt);
+        state.fpsAverage = lerp(state.fpsAverage, state.fps, 0.04);
+
+        if (state.ready) {
+          updateAudioFeatures(time, dt);
+          uploadAudioTexture();
+          updateParticles(time, dt);
+          render(time, dt);
+          updateHud();
+          maybeReduceParticleBudget();
+        }
+
+        requestAnimationFrame(loop);
+      }
+
+      try {
+        setupUI();
+        initGL();
+        requestAnimationFrame(loop);
+      } catch (error) {
+        console.error(error);
+        setStatus('Startup failed: ' + error.message);
+        ui.unsupported.classList.remove('hidden');
+        ui.unsupported.classList.add('flex');
+      }
+    })();
+  </script>
 </body>
 </html>
